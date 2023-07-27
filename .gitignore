@@ -4,3 +4,4 @@ notebooks/preprocessing.py
 __pycache__
 .ipynb_checkpoints
 notebooks/weights/
+notebooks/lightning_logs
