@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[23]:
 
 
 import torch
@@ -30,12 +30,13 @@ import os
 import glob
 import pickle
 from itertools import combinations
+import gc
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
-# In[2]:
+# In[3]:
 
 
 DATA_ROOT = "../data/compgan_dataset/"
@@ -57,7 +58,14 @@ print(data_files)
 print(len(data_files))
 
 
-# In[3]:
+# In[4]:
+
+
+USER_NUM = 16
+assert USER_NUM == len(data_files)
+
+
+# In[5]:
 
 
 # important
@@ -76,7 +84,7 @@ label_list = ['歩行(平地)',
 label_dict = dict(enumerate(label_list))
 
 
-# In[4]:
+# In[6]:
 
 
 # important
@@ -88,13 +96,13 @@ eng_label_dict = dict(zip(
 eng_label_list = [eng_label_dict[i] for i in label_list]
 
 
-# In[5]:
+# In[7]:
 
 
 test_user = 0
 
 
-# In[6]:
+# In[8]:
 
 
 def load_train_test(test_user):
@@ -111,17 +119,30 @@ def load_train_test(test_user):
     train_data, train_label = np.load(train_data_file_path), np.load(train_label_file_path)
     test_data, test_label = np.load(test_data_file_path), np.load(test_label_file_path)
 
-    return train_data, train_label, test_data, test_label
+    l, s, d, w = train_data.shape
+    train_data_reshape = train_data.reshape(l, s * d, w).transpose(0,2,1).reshape(-1, s * d)
+
+    l_t, s_t, d_t, w_t = test_data.shape
+    test_data_reshape = test_data.reshape(l_t, s_t * d_t, w_t).transpose(0,2,1).reshape(-1, s_t * d_t)
+
+    sc = StandardScaler()
+    train_data_reshape_norm = sc.fit_transform(train_data_reshape)
+    test_data_reshape_norm = sc.transform(test_data_reshape)
+
+    train_data_reshape_back = train_data_reshape_norm.reshape(l, w, s * d)
+    test_data_reshape_back = test_data_reshape_norm.reshape(l_t, w_t, s_t * d_t)
+
+    return train_data_reshape_back, train_label, test_data_reshape_back, test_label
 
 
-# In[7]:
+# In[9]:
 
 
 # test
 train_data, train_label, test_data, test_label = load_train_test(test_user)
 
 
-# In[8]:
+# In[10]:
 
 
 print(train_data.shape)
@@ -130,36 +151,30 @@ print(test_data.shape)
 print(test_label.shape)
 
 
-# In[9]:
+# In[12]:
 
 
-# test
-l, s, d, w = train_data.shape
-train_data = train_data.reshape(l, s * d, w)
-train_data = train_data.transpose(0,2,1)
-
-train_data.shape
+feature_num = train_data.shape[-1]
 
 
-# In[10]:
+# In[ ]:
 
 
-feature_num = s * d
 
 
-# In[11]:
+
+# In[13]:
 
 
 class CustomDataset(Dataset):
     def __init__(self, feature_data, label_data, missing_sensor_id_list=None):
-        l, s, d, w = feature_data.shape
-        self.features = feature_data.reshape(l, s * d, w).transpose(0,2,1)
+        self.features = feature_data
         self.label = label_data
         
         if missing_sensor_id_list is not None:
             for missing_sensor_id in missing_sensor_id_list:
                 self.features[:, :, missing_sensor_id*6:(missing_sensor_id+1)*6] = 0
-        
+
         assert len(self.features) == len(self.label), "features len is not equal to label len"
         
     def __len__(self):
@@ -171,25 +186,50 @@ class CustomDataset(Dataset):
         return x, int(label)
 
 
-# In[12]:
+# In[14]:
+
+
+def get_train_test_dataset(test_user, missing_sensor_id_list, echo=0):
+    if echo: print("***********Start create dataset***********")
+    
+    train_dataset_concat_list = []
+    for user in range(USER_NUM):
+        if user == test_user:
+            if echo: print("test_user", user)
+            train_data, train_label, test_data, test_label = load_train_test(user)
+            test_dataset = CustomDataset(test_data, test_label, missing_sensor_id_list=missing_sensor_id_list)
+    
+        else:
+            if echo: print("train_user", user)
+            train_data, train_label, test_data, test_label = load_train_test(user)
+            train_dataset = CustomDataset(train_data, train_label, missing_sensor_id_list=missing_sensor_id_list)
+            train_dataset_concat_list.append(train_dataset)
+
+    concat_train_dataset = torch.utils.data.ConcatDataset(train_dataset_concat_list)
+    if not echo: print("***********Create dataset completed***********")
+    return concat_train_dataset, test_dataset
+
+
+# In[19]:
 
 
 # test
-train_data, train_label, test_data, test_label = load_train_test(test_user)
-dataset = CustomDataset(
-    train_data,
-    train_label,
-    missing_sensor_id_list=[0]
-)
+dataset, test_dataset = get_train_test_dataset(test_user=0, missing_sensor_id_list=[0], echo=1)
 
 
-# In[13]:
+# In[26]:
 
 
 dataset[0]
 
 
-# In[14]:
+# In[27]:
+
+
+test_dataset[0]
+
+
+# In[28]:
 
 
 # test
@@ -199,7 +239,7 @@ val_size = len(dataset) - train_size
 train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
 
-# In[15]:
+# In[29]:
 
 
 # test
@@ -216,7 +256,7 @@ val_dataloader = DataLoader(
     shuffle=False)
 
 
-# In[16]:
+# In[30]:
 
 
 next(train_dataloader.__iter__())[0].shape
@@ -224,7 +264,7 @@ next(train_dataloader.__iter__())[0].shape
 
 # ## model definition
 
-# In[17]:
+# In[31]:
 
 
 class SelfAttention(nn.Module):
@@ -246,7 +286,7 @@ class SelfAttention(nn.Module):
         return weighted
 
 
-# In[22]:
+# In[32]:
 
 
 class LSTMModel(pl.LightningModule):
@@ -364,20 +404,20 @@ class LSTMModel(pl.LightningModule):
         
 
 
-# In[23]:
+# In[33]:
 
 
 model = LSTMModel()
 summary(model)
 
 
-# In[24]:
+# In[39]:
 
 
 list(combinations(range(7),1))
 
 
-# In[25]:
+# In[ ]:
 
 
 from tqdm.auto import tqdm
@@ -386,81 +426,69 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 batch_size = 1024
 patience = 20
-# missing_sensor_numbers = 0
+missing_sensor_numbers = 0
 all_test_pred = {}
 
-for missing_sensor_numbers in range(6):
-    print(f"start learning missing_sensor_numbers = {missing_sensor_numbers}")
-    
-    for missing_index in combinations(range(7),missing_sensor_numbers):
-    
-        all_test = []
-        all_pred = []
-    
-        # kfold_train_test_index_list = [kfold_train_test_index_list[0]]
-    
-        for i in range(len(data_files)):
-            print(f"\n*************training on User{i}*************")
-            train_data, train_label, test_data, test_label = load_train_test(i) # test user
-            dataset = CustomDataset(
-                train_data,
-                train_label,
-                missing_sensor_id_list=missing_index,
-            )
-    
-            train_size = int(0.8 * len(dataset))
-            val_size = len(dataset) - train_size
-    
-            train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-            test_dataset =  CustomDataset(
-                test_data,
-                test_label,
-                missing_sensor_id_list=missing_index,
-            )
-    
-            train_dataloader = DataLoader(
-                train_dataset, 
-                batch_size=batch_size,
-                num_workers=4, # number of subprocesses to use for data loading
-                shuffle=True)
-    
-            val_dataloader = DataLoader(
-                val_dataset, 
-                batch_size=batch_size,
-                num_workers=2, # number of subprocesses to use for data loading
-                shuffle=False)
-    
-            test_dataloader = DataLoader(
-                test_dataset,
-                batch_size=batch_size,
-                num_workers=2, # number of subprocesses to use for data loading
-                shuffle=False)
-    
-            model = LSTMModel(hidden_size=128, input_size=feature_num, output_size=len(label_list))
-    
-            tb_logger = TensorBoardLogger(".")
-    
-            trainer = pl.Trainer(
-                logger=tb_logger,
-                callbacks=[EarlyStopping(monitor="val_loss", patience=patience, mode="min")],
-            )
-            trainer.fit(model, train_dataloader, val_dataloader)
-            trainer.test(model, test_dataloader)
-    
-            all_test.extend(model.all_test)
-            all_pred.extend(model.all_pred)
-            
-        all_test_pred[missing_index] = (all_test, all_pred)
-    
-    os.makedirs(RESULT_FOLDER_PATH, exist_ok=True)
-    with open(os.path.join(RESULT_FOLDER_PATH, f"all_test_pred_{missing_sensor_numbers}.pkl"), "wb") as f:
-        pickle.dump(all_test_pred, f)
+# for missing_sensor_numbers in range(6):
+print(f"start learning missing_sensor_numbers = {missing_sensor_numbers}")
+
+for missing_index in combinations(range(7),missing_sensor_numbers):
+
+    all_test = []
+    all_pred = []
+
+    # kfold_train_test_index_list = [kfold_train_test_index_list[0]]
+
+    for i in range(len(data_files)):
+        print(f"\n*************training on User{i}*************")
+        dataset, test_dataset = get_train_test_dataset(test_user=i, missing_sensor_id_list=missing_index, echo=1)
+        train_size = int(0.8 * len(dataset))
+        val_size = len(dataset) - train_size
+        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+        train_dataloader = DataLoader(
+            train_dataset, 
+            batch_size=batch_size,
+            num_workers=4, # number of subprocesses to use for data loading
+            shuffle=True)
+
+        val_dataloader = DataLoader(
+            val_dataset, 
+            batch_size=batch_size,
+            num_workers=2, # number of subprocesses to use for data loading
+            shuffle=False)
+
+        test_dataloader = DataLoader(
+            test_dataset,
+            batch_size=batch_size,
+            num_workers=2, # number of subprocesses to use for data loading
+            shuffle=False)
+
+        model = LSTMModel(hidden_size=128, input_size=feature_num, output_size=len(label_list))
+
+        tb_logger = TensorBoardLogger(".")
+
+        trainer = pl.Trainer(
+            logger=tb_logger,
+            callbacks=[EarlyStopping(monitor="val_loss", patience=patience, mode="min")],
+        )
+        trainer.fit(model, train_dataloader, val_dataloader)
+        trainer.test(model, test_dataloader)
+
+        all_test.extend(model.all_test)
+        all_pred.extend(model.all_pred)
+        
+    all_test_pred[missing_index] = (all_test, all_pred)
+
+os.makedirs(RESULT_FOLDER_PATH, exist_ok=True)
+with open(os.path.join(RESULT_FOLDER_PATH, f"all_test_pred_{missing_sensor_numbers}.pkl"), "wb") as f:
+    pickle.dump(all_test_pred, f)
 
 
-# In[26]:
+# In[41]:
 
 
-for missing_sensor_numbers in range(6):
+for missing_sensor_numbers in range(1):
     with open(os.path.join(RESULT_FOLDER_PATH, f"all_test_pred_{missing_sensor_numbers}.pkl"), "rb") as f:
         all_test_pred = pickle.load(f)
 
@@ -491,6 +519,33 @@ for missing_sensor_numbers in range(6):
             ax[idx//row_item][idx%row_item].set_title(f"missing_index {missing_index} confusion matrix")
             
     plt.savefig(os.path.join(RESULT_FOLDER_PATH, f"all_test_pred_{missing_sensor_numbers}.jpg"))
+
+
+# In[42]:
+
+
+with open(os.path.join(RESULT_FOLDER_PATH, f"all_test_pred_0.pkl"), "rb") as f:
+    all_test_pred = pickle.load(f)
+    
+missing_index = list(all_test_pred.keys())[0]
+
+all_tall_test, all_pred = all_test_pred[missing_index]
+
+# print("missing index", missing_index)
+all_test_with_label = [label_list[i] for i in all_test]
+all_pred_with_label = [label_list[i] for i in all_pred]
+
+cf = confusion_matrix(all_test_with_label, all_pred_with_label, labels=label_list)
+sns.heatmap(cf, annot=True, xticklabels=eng_label_list, yticklabels=eng_label_list, fmt='g')
+
+
+# In[46]:
+
+
+from sklearn.metrics import accuracy_score
+all_test = list(map(lambda x: x.cpu().item(), all_tall_test))
+all_pred = list(map(lambda x: x.cpu().item(), all_pred))
+accuracy_score(all_test, all_pred)
 
 
 # In[ ]:
