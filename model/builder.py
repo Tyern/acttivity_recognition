@@ -56,9 +56,8 @@ class BaseModel(L.LightningModule):
         X = X.float()
         
         test_pred_logits = self.forward(X)
-        test_pred_labels = test_pred_logits.argmax(dim=1)
         
-        return test_pred_labels
+        return test_pred_logits
         
 
 class ConvLSTMCell(nn.Module):

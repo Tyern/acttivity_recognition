@@ -18,9 +18,14 @@ class CustomTrainDataset(Dataset):
         self.missing_sensor_numbers = missing_sensor_numbers
 
         self.missing_index_list = []
-        for missing_count in range(missing_sensor_numbers + 1):
-            for missing_index in combinations(range(SENSOR_NUM), missing_count):
-                self.missing_index_list.append(missing_index)
+        
+        if self.mode == self.TRAIN_MODE:
+            for missing_count in range(missing_sensor_numbers + 1):
+                for missing_index in combinations(range(SENSOR_NUM), missing_count):
+                    self.missing_index_list.append(missing_index)
+                    
+        elif self.mode == self.TEST_MODE:
+                self.missing_index_list = list(combinations(range(SENSOR_NUM), missing_sensor_numbers))
 
     def transform(self, one_feature, missing_sensor_id_list):
         # Make one sensor data become 0
