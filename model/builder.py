@@ -47,16 +47,19 @@ class BaseModel(L.LightningModule):
         
         y_pred = self.forward(X)
         # 2. Calculate  and accumulate loss
-        loss = F.cross_entropy(y_pred, y)
+        val_loss = F.cross_entropy(y_pred, y)
+        self.log("val_loss", val_loss)
         
-        self.log("val_loss", loss)
+        # 3. Calculate and accumulate accuracy
+        val_pred_label = y_pred.argmax(dim=1)
+        val_acc = ((val_pred_label == y).sum().item()/len(val_pred_label))
+        self.log("val_acc", val_acc)
 
     def predict_step(self, batch, batch_idx):
         X, y = batch
         X = X.float()
         
         test_pred_logits = self.forward(X)
-        
         return test_pred_logits
         
 
@@ -251,33 +254,13 @@ class ConvLSTM(nn.Module):
         if not isinstance(param, list):
             param = [param] * num_layers
         return param
-    
 
-class SelfAttention(nn.Module):
-    def __init__(self, input_dim):
-        super().__init__()
-        self.input_dim = input_dim
-        self.query = nn.Linear(input_dim, input_dim)
-        self.key = nn.Linear(input_dim, input_dim)
-        self.value = nn.Linear(input_dim, input_dim)
-        self.softmax = nn.Softmax(dim=2)
-            
-    def forward(self, x):
-        queries = self.query(x)
-        keys = self.key(x)
-        values = self.value(x)
-        
-        scores = torch.bmm(queries, keys.transpose(1, 2)) / (self.input_dim ** 0.5)
-        attention = self.softmax(scores)
-        weighted = torch.bmm(attention, values)
-        return weighted
-    
 
 class LSTMModel(BaseModel):
-    def __init__(self, hidden_size=128, input_size=42, output_size=10, **kwargs):
+    def __init__(self, hidden_size=128, sequence_length=256, input_size=42, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, 256, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
         
         self.rnn = nn.LSTM(input_size=input_size, 
                           hidden_size=hidden_size,
@@ -309,6 +292,7 @@ class LSTMModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         activation, _ = self.rnn(x)
         
         b, _, _ = activation.size()
@@ -323,10 +307,10 @@ class LSTMModel(BaseModel):
     
     
 class LSTMBiModel(BaseModel):
-    def __init__(self, hidden_size=128, input_size=42, output_size=10, **kwargs):
+    def __init__(self, hidden_size=128, sequence_length=256, input_size=42, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, 256, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
         
         self.rnn = nn.LSTM(input_size=input_size, 
                           hidden_size=hidden_size,
@@ -361,6 +345,7 @@ class LSTMBiModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * double_hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         activation, (h, _) = self.rnn(x)
         b, _, _ = activation.size()
         
@@ -373,28 +358,33 @@ class LSTMBiModel(BaseModel):
         
         return output
     
-
+    
 class LSTMAttentionModel(BaseModel):
-    def __init__(self, hidden_size=128, input_size=42, output_size=10, **kwargs):
+    def __init__(self, hidden_size=128, sequence_length=256, input_size=42, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, 256, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
         
         self.rnn1 = nn.LSTM(input_size=input_size, 
                           hidden_size=hidden_size,
                           num_layers=1,
                           batch_first=True)
         
-        self.attention1 = SelfAttention(
-            input_dim=hidden_size)
+        self.attention1 = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=8,
+            batch_first=True
+        )
 
         self.rnn2 = nn.LSTM(input_size=hidden_size, 
                           hidden_size=hidden_size,
                           num_layers=1,
                           batch_first=True)
         
-        self.attention2 = SelfAttention(
-            input_dim=hidden_size
+        self.attention2 = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=8,
+            batch_first=True
         )
 
         self.rnn3 = nn.LSTM(input_size=hidden_size, 
@@ -427,10 +417,11 @@ class LSTMAttentionModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         activation, _ = self.rnn1(x)
-        activation = self.attention1(activation)
+        activation, _ = self.attention1(activation, activation, activation)
         activation, _ = self.rnn2(activation)
-        activation = self.attention2(activation)
+        activation, _ = self.attention2(activation, activation, activation)
         activation, (h, _) = self.rnn3(activation)
 
         b, _, _ = activation.size()
@@ -450,7 +441,7 @@ class CNNLSTMModel(BaseModel):
     def __init__(self, hidden_size=128, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, sequence_length, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
         
         self.cnn = nn.Conv1d(sequence_length, cnn_filter_size, kernel_size=5, padding="same")
         
@@ -484,6 +475,7 @@ class CNNLSTMModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         output = self.cnn(x)
         activation, _ = self.rnn(output)
         
@@ -497,12 +489,12 @@ class CNNLSTMModel(BaseModel):
         
         return output
     
-
+    
 class CNNLSTMAttentionModel(BaseModel):
     def __init__(self, hidden_size=128, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, sequence_length, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
         
         self.cnn = nn.Conv1d(sequence_length, cnn_filter_size, kernel_size=5, padding="same")
         
@@ -511,16 +503,21 @@ class CNNLSTMAttentionModel(BaseModel):
                           num_layers=1,
                           batch_first=True)
         
-        self.attention1 = SelfAttention(
-            input_dim=hidden_size)
-
+        self.attention1 = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=8,
+            batch_first=True
+        )
+        
         self.rnn2 = nn.LSTM(input_size=hidden_size, 
                           hidden_size=hidden_size,
                           num_layers=1,
                           batch_first=True)
         
-        self.attention2 = SelfAttention(
-            input_dim=hidden_size
+        self.attention2 = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=8,
+            batch_first=True
         )
 
         self.rnn3 = nn.LSTM(input_size=hidden_size, 
@@ -553,11 +550,12 @@ class CNNLSTMAttentionModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         output = self.cnn(x)
         activation, _ = self.rnn1(output)
-        activation = self.attention1(activation)
+        activation, _ = self.attention1(activation, activation, activation)
         activation, _ = self.rnn2(activation)
-        activation = self.attention2(activation)
+        activation, _ = self.attention2(activation, activation, activation)
         activation, _ = self.rnn3(activation)
 
         b, _, _ = activation.size()
@@ -577,7 +575,7 @@ class CNNModel(BaseModel):
     def __init__(self, hidden_size=128, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, sequence_length, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
 
         self.cnn1 = nn.Sequential(
             nn.Conv1d(sequence_length, cnn_filter_size, kernel_size=5, padding="same"),
@@ -620,6 +618,7 @@ class CNNModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         output = self.cnn1(x)
         output = self.cnn2(output)
         b, _, _ = output.shape
@@ -634,12 +633,11 @@ class CNNModel(BaseModel):
         
         return output
     
-    
 class CNNAttentionModel(BaseModel):
     def __init__(self, hidden_size=128, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, sequence_length, input_size)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
 
         self.cnn1 = nn.Sequential(
             nn.Conv1d(sequence_length, cnn_filter_size, kernel_size=5, padding="same"),
@@ -648,8 +646,10 @@ class CNNAttentionModel(BaseModel):
             nn.ReLU(),
         )
 
-        self.attention1 = SelfAttention(
-            input_dim=input_size
+        self.attention1 =  nn.MultiheadAttention(
+            embed_dim=input_size,
+            num_heads=6,
+            batch_first=True
         )
 
         self.cnn2 = nn.Sequential(
@@ -659,8 +659,11 @@ class CNNAttentionModel(BaseModel):
             nn.ReLU(),
         )
 
-        self.attention2 = SelfAttention(
-            input_dim=input_size)
+        self.attention2 =  nn.MultiheadAttention(
+            embed_dim=input_size,
+            num_heads=6,
+            batch_first=True
+        )
         
         self.gap = nn.AdaptiveAvgPool1d(1)
         
@@ -689,81 +692,11 @@ class CNNAttentionModel(BaseModel):
         self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
         
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         output = self.cnn1(x)
-        output = self.attention1(output)
+        output, _ = self.attention1(output, output, output)
         output = self.cnn2(output)
-        output = self.attention2(output)
-        b, _, _ = output.shape
-        
-        output = self.gap(output).view(b, -1)
-
-        seq_1_output = self.seq_1(output)
-        seq_2_output = self.seq_2(output)
-        
-        output = torch.concat([output, seq_1_output, seq_2_output], dim=1)
-        output = self.classifier(output)
-        
-        return output
-    
-
-class CNNAttentionModel(BaseModel):
-    def __init__(self, hidden_size=128, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
-        super().__init__()
-        self.save_hyperparameters()
-        self.example_input_array = torch.Tensor(1024, sequence_length, input_size)
-
-        self.cnn1 = nn.Sequential(
-            nn.Conv1d(sequence_length, cnn_filter_size, kernel_size=5, padding="same"),
-            nn.BatchNorm1d(num_features=cnn_filter_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-        )
-
-        self.attention1 = SelfAttention(
-            input_dim=input_size
-        )
-
-        self.cnn2 = nn.Sequential(
-            nn.Conv1d(cnn_filter_size, hidden_size, kernel_size=5, padding="same"),
-            nn.BatchNorm1d(num_features=hidden_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-        )
-
-        self.attention2 = SelfAttention(
-            input_dim=input_size)
-        
-        self.gap = nn.AdaptiveAvgPool1d(1)
-        
-        self.seq_1 = nn.Sequential(
-            nn.Linear(in_features=hidden_size, out_features=hidden_size),
-            nn.BatchNorm1d(num_features=hidden_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-            nn.Linear(in_features=hidden_size, out_features=hidden_size),
-            nn.BatchNorm1d(num_features=hidden_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-        )
-        
-        self.seq_2 = nn.Sequential(
-            nn.Linear(in_features=hidden_size, out_features=hidden_size),
-            nn.BatchNorm1d(num_features=hidden_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-            nn.Linear(in_features=hidden_size, out_features=hidden_size),
-            nn.BatchNorm1d(num_features=hidden_size),
-            nn.Dropout1d(p=0.2),
-            nn.ReLU(),
-        )
-        
-        self.classifier = nn.Linear(in_features=3 * hidden_size, out_features=output_size)
-        
-    def forward(self, x):
-        output = self.cnn1(x)
-        output = self.attention1(output)
-        output = self.cnn2(output)
-        output = self.attention2(output)
+        output, _ = self.attention2(output, output, output)
         b, _, _ = output.shape
         
         output = self.gap(output).view(b, -1)
@@ -791,12 +724,13 @@ class Classifier1DMaxPoolBNModel(BaseModel):
                 1024, 256, 128
             ],
             bnorm=True,
-            in_feature_shape=256,
+            input_size=42,
+            sequence_length=256,
             out_class_num = 10,
         ):
         super().__init__()
         self.save_hyperparameters()
-        self.example_input_array = torch.rand(10, 42, in_feature_shape)
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
 
         cnn_list = []
         if pool_channel_param is None:
