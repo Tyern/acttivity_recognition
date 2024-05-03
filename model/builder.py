@@ -12,7 +12,7 @@ class BaseModel(L.LightningModule):
         super().__init__()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(params=self.parameters(), lr=0.0005)
+        optimizer = torch.optim.Adam(params=self.parameters(), lr=0.001)
         return optimizer
     
     def training_step(self, batch, batch_idx):
