@@ -788,3 +788,68 @@ class Classifier1DMaxPoolBNModel(BaseModel):
         out = self.linear(out.view(out.shape[0], -1))
         return out
         
+
+class ConvLSTMModel(BaseModel):
+    def __init__(
+            self, 
+            hidden_size=64, 
+            sequence_length=256, 
+            cnn_filter_size=64, 
+            input_size=42,
+            output_size=10, 
+            **kwargs):
+        
+        super().__init__()
+        self.save_hyperparameters()
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
+        
+        self.conv_lstm = ConvLSTM(input_dim=1, hidden_dim=[cnn_filter_size], kernel_size=(1,3), num_layers=1, batch_first=True,)
+        self.dropout = nn.Dropout2d(p=0.5)
+        self.linear1 = nn.Linear(in_features=sequence_length * cnn_filter_size * input_size, out_features=hidden_size)
+        self.relu = nn.ReLU()
+        self.linear2 = nn.Linear(in_features=hidden_size, out_features=output_size)
+        self.softmax = nn.Softmax()
+        
+    def forward(self, x):
+        out = x.view(x.shape[0], 1, 1, x.shape[1], x.shape[2])
+        h, _ = self.conv_lstm(out)
+        out = self.dropout(h[0])
+        out = out.view(out.shape[0], self.hparams.sequence_length * self.hparams.cnn_filter_size * self.hparams.input_size)
+        out = self.linear1(out)
+        out = self.relu(out)
+        out = self.linear2(out)
+        out = self.softmax(out)
+        return out        
+    
+
+class ConvLSTMAttentionModel(BaseModel):
+    def __init__(self, hidden_size=64, sequence_length=256, cnn_filter_size=64, input_size=42, output_size=10, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
+        
+        self.conv_lstm = ConvLSTM(input_dim=1, hidden_dim=[cnn_filter_size], kernel_size=(1,3), num_layers=1, batch_first=True,)
+        self.dropout = nn.Dropout2d(p=0.5)
+        self.attention1 = nn.MultiheadAttention(
+            embed_dim=cnn_filter_size * input_size,
+            num_heads=1,
+            batch_first=True
+        )
+        self.linear1 = nn.Linear(in_features=sequence_length * cnn_filter_size * input_size, out_features=hidden_size)
+        self.relu = nn.ReLU()
+        self.linear2 = nn.Linear(in_features=hidden_size, out_features=output_size)
+        self.softmax = nn.Softmax()
+        
+    def forward(self, x):
+        out = x.view(x.shape[0], 1, 1, x.shape[1], x.shape[2])
+        h, _ = self.conv_lstm(out)
+        out = self.dropout(h[0])
+        out = out.view(out.shape[0], self.hparams.sequence_length, self.hparams.cnn_filter_size * self.hparams.input_size)
+        out, _ = self.attention1(out, out, out)
+        out = out.reshape(-1, self.hparams.sequence_length * self.hparams.cnn_filter_size * self.hparams.input_size)
+        out = self.linear1(out)
+        out = self.relu(out)
+        out = self.linear2(out)
+        out = self.softmax(out)
+        return out        
+    
