@@ -32,7 +32,7 @@ class CustomTrainDataset(Dataset):
         one_feature_cp = one_feature.copy()
         
         for missing_sensor_id in missing_sensor_id_list:
-            one_feature_cp[:, missing_sensor_id*6:(missing_sensor_id+1)*6] = 0
+            one_feature_cp[missing_sensor_id*6:(missing_sensor_id+1)*6, :] = 0
         return one_feature_cp
         
     def __len__(self):
