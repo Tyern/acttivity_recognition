@@ -68,7 +68,6 @@ class ConvLSTMCell(nn.Module):
     def __init__(self, input_dim, hidden_dim, kernel_size, bias):
         """
         Initialize ConvLSTM cell.
-
         Parameters
         ----------
         input_dim: int
@@ -86,9 +85,10 @@ class ConvLSTMCell(nn.Module):
         super(ConvLSTMCell, self).__init__()
 
         self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = hidden_dim # filter num
 
         self.kernel_size = kernel_size
+        
         self.padding = kernel_size[0] // 2, kernel_size[1] // 2
         self.bias = bias
 
@@ -104,7 +104,7 @@ class ConvLSTMCell(nn.Module):
         combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
 
         combined_conv = self.conv(combined)
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
+        cc_i, cc_f, cc_g, cc_o = torch.split(combined_conv, self.hidden_dim, dim=1)
         i = torch.sigmoid(cc_i)
         f = torch.sigmoid(cc_f)
         o = torch.sigmoid(cc_o)
@@ -119,7 +119,6 @@ class ConvLSTMCell(nn.Module):
         height, width = image_size
         return (torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device),
                 torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device))
-
 
 
 class ConvLSTM(nn.Module):
@@ -788,38 +787,57 @@ class Classifier1DMaxPoolBNModel(BaseModel):
         out = self.linear(out.view(out.shape[0], -1))
         return out
         
-
 class ConvLSTMModel(BaseModel):
     def __init__(
-            self, 
-            hidden_size=64, 
-            sequence_length=256, 
-            cnn_filter_size=64, 
-            input_size=42,
-            output_size=10, 
-            **kwargs):
-        
+        self, 
+        hidden_size=64, 
+        sequence_length=256, 
+        cnn_filter_size=64, 
+        input_size=42,
+        output_size=10, 
+        **kwargs):
+
         super().__init__()
         self.save_hyperparameters()
         self.example_input_array = torch.rand(10, input_size, sequence_length)
         
-        self.conv_lstm = ConvLSTM(input_dim=1, hidden_dim=[cnn_filter_size], kernel_size=(1,3), num_layers=1, batch_first=True,)
-        self.dropout = nn.Dropout2d(p=0.5)
-        self.linear1 = nn.Linear(in_features=sequence_length * cnn_filter_size * input_size, out_features=hidden_size)
-        self.relu = nn.ReLU()
-        self.linear2 = nn.Linear(in_features=hidden_size, out_features=output_size)
-        self.softmax = nn.Softmax()
+        self.conv1 = nn.Conv2d(1, cnn_filter_size//2, (3, 3), 1, "same")
+        self.bn1 = nn.BatchNorm2d(cnn_filter_size//2)
+        self.conv2 = nn.Conv2d(cnn_filter_size//2, cnn_filter_size, (3, 3), 1, "same")
+        self.bn2 = nn.BatchNorm2d(cnn_filter_size)
+        self.mp = nn.MaxPool2d(kernel_size=(2,2))
+        self.conv_lstm = ConvLSTM(input_dim=(cnn_filter_size), hidden_dim=hidden_size, kernel_size=(1,3), num_layers=1, batch_first=True)
+        self.fc1 = nn.Linear(172032, 64)
+        self.fc2 = nn.Linear(64, output_size)
         
+        # Activation
+        self.activation = nn.ReLU()
+        self.softmax = nn.Softmax()
+    
     def forward(self, x):
-        out = x.view(x.shape[0], 1, 1, x.shape[1], x.shape[2])
-        h, _ = self.conv_lstm(out)
-        out = self.dropout(h[0])
-        out = out.view(out.shape[0], self.hparams.sequence_length * self.hparams.cnn_filter_size * self.hparams.input_size)
-        out = self.linear1(out)
-        out = self.relu(out)
-        out = self.linear2(out)
+        x = x.permute(0, 2, 1)
+        x = x.view(x.shape[0], 1, x.shape[1], x.shape[2])
+        
+        out = self.conv1(x)
+        out = self.activation(out)
+        out = self.bn1(out)
+        out = self.conv2(out)
+        out = self.activation(out)
+        out = self.bn2(out)
+        out = self.mp(out)
+        
+        out = out.view(x.shape[0], 1, 64, 128, 21)
+        _, last_state_list = self.conv_lstm(out)
+        out = last_state_list[-1][0] # last state ht
+        out = self.activation(out)
+        
+        out = out.view(x.shape[0], -1)
+        out = self.fc1(out)
+        out = self.activation(out)
+        
+        out = self.fc2(out)
         out = self.softmax(out)
-        return out        
+        return out   
     
 
 class ConvLSTMAttentionModel(BaseModel):
