@@ -11,8 +11,8 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 
 import sys
 from pathlib import Path
-curr = Path(__file__).resolve()
-sys.path.insert(0, curr.parent.parent.as_posix())
+curr = Path(__file__).resolve().parent
+sys.path.insert(0, curr.parent.as_posix())
 from model.builder import BaseModel
 from datamodule.datamodule import DataModule, FFTDataModule
 
@@ -174,16 +174,14 @@ class FixedLSTMModel4(BaseModel): # test whether use 2 LSTM is better?
         return out
 
 if __name__ == "__main__":
-    # train_model_class = [FixedLSTMModel1, FixedLSTMModel2, FixedLSTMModel3, FixedLSTMModel4]
-    train_model_class = [FixedLSTMModel1]
+    train_model_class = [FixedLSTMModel1, FixedLSTMModel2, FixedLSTMModel3, FixedLSTMModel4]
     
-    n_epochs = 1
-    patience = 5
+    n_epochs = 30
+    patience = 8
 
-    missing = 0
-    user = 0
-
+    missing = 2
     batch_size = 256
+    
     for model_class in train_model_class: 
         
         model_name = model_class.__name__
@@ -206,8 +204,10 @@ if __name__ == "__main__":
                 
             print(f"\n*************training on User{user}*************")
             
+            default_root_dir = (curr/"04_lightning_log")
+            default_root_dir.mkdir(exist_ok=True)
             trainer = L.Trainer(
-                default_root_dir=(curr/"04_lightning_log").as_posix(),
+                default_root_dir=default_root_dir.as_posix(),
                 callbacks=[EarlyStopping(monitor="val_loss", patience=patience)],
                 max_epochs=n_epochs,
                 check_val_every_n_epoch=1,
