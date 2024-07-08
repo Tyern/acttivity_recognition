@@ -14,6 +14,7 @@ import sys
 curr = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(os.path.abspath(curr), "../.."))
 from model.builder import BaseModel
+from datamodule.datamodule import DataModule, FFTDataModule
     
 
 class FixedLSTMModel3(BaseModel): # test whether add ReLU after rnn is better?
@@ -148,17 +149,17 @@ class FixedLSTMModel3_GAttention1(BaseModel): # test whether add ReLU after rnn 
         
     def forward(self, x):
         x = x.permute(0, 2, 1)
-        
         # cnn path
         cnn_extract = x.view(x.shape[0], 1, x.shape[1], x.shape[2])
-        cnn_extract = self.cnn_extract1(cnn_extract).squeeze()
+        cnn_extract = self.cnn_extract1(cnn_extract)
+        cnn_extract = cnn_extract.view(cnn_extract.shape[0], cnn_extract.shape[2], cnn_extract.shape[3])
         
         # rnn path
         output, _ = self.rnn1(x)
         
         # attention and residual
         attn = nn.functional.scaled_dot_product_attention(output, cnn_extract, cnn_extract)
-        output += attn
+        output = attn + output
         
         output, _ = self.rnn2(output)
         
@@ -224,14 +225,15 @@ class FixedLSTMModel3_GAttention1_Mulpath(BaseModel):
         
         # cnn path
         cnn_extract = x.view(x.shape[0], 1, x.shape[1], x.shape[2])
-        cnn_extract = self.cnn_extract1(cnn_extract).squeeze()
+        cnn_extract = self.cnn_extract1(cnn_extract)
+        cnn_extract = cnn_extract.view(cnn_extract.shape[0], cnn_extract.shape[2], cnn_extract.shape[3])
         
         # rnn path
         output, _ = self.rnn1(x)
         
         # attention and residual
         attn = nn.functional.scaled_dot_product_attention(output, cnn_extract, cnn_extract)
-        output += attn
+        output = output + attn
         
         output, _ = self.rnn2(output)
         
@@ -250,9 +252,20 @@ class FixedLSTMModel3_GAttention1_Mulpath(BaseModel):
         return output
     
 if __name__ == "__main__":
+    torch.autograd.set_detect_anomaly(True)
     model_class_list = [FixedLSTMModel3, FixedLSTMModel3Attention1, FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
     for model_class in model_class_list:
         model_name = model_class.__name__
         print("#"*20, model_name, "#"*20)
         model = model_class()
+        data_module = DataModule(
+                test_user=0, 
+                missing_sensor_numbers=0,
+                batch_size=10)
+        
         print(ModelSummary(model))
+        trainer = L.Trainer(
+            accelerator="gpu", 
+            fast_dev_run=True)
+        trainer.fit(model, data_module)
+        
