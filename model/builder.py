@@ -363,7 +363,7 @@ class LSTMAttentionModel(BaseModel):
         super().__init__()
         self.save_hyperparameters()
         self.example_input_array = torch.rand(10, input_size, sequence_length)
-        
+        self.activation = nn.ReLU()
         self.rnn1 = nn.LSTM(input_size=input_size, 
                           hidden_size=hidden_size,
                           num_layers=1,
@@ -417,15 +417,18 @@ class LSTMAttentionModel(BaseModel):
         
     def forward(self, x):
         x = x.permute(0, 2, 1)
-        activation, _ = self.rnn1(x)
-        activation, _ = self.attention1(activation, activation, activation)
-        activation, _ = self.rnn2(activation)
-        activation, _ = self.attention2(activation, activation, activation)
-        activation, (h, _) = self.rnn3(activation)
-
-        b, _, _ = activation.size()
+        output, _ = self.rnn1(x)
+        output, _ = self.attention1(output, output, output)
+        output = self.activation(output)
         
-        lstm_output = activation[:,-1,:].view(b,-1)
+        output, _ = self.rnn2(output)
+        output, _ = self.attention2(output, output, output)
+        output, (h, _) = self.rnn3(output)
+        output = self.activation(output)
+
+        b, _, _ = output.size()
+        
+        lstm_output = output[:,-1,:].view(b,-1)
         
         seq_1_output = self.seq_1(lstm_output)
         seq_2_output = self.seq_2(lstm_output)
@@ -871,3 +874,50 @@ class ConvLSTMAttentionModel(BaseModel):
         out = self.softmax(out)
         return out        
     
+
+class FixedCNNModel2(BaseModel): # reduce hidden size
+    def __init__(self, hidden_size=64, sequence_length=256, input_size=42, cnn_filter_size=64, output_size=10, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
+
+        self.cnn1 = nn.Sequential(
+            nn.Conv1d(input_size, cnn_filter_size, kernel_size=9, stride=3),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_features=cnn_filter_size),
+            nn.Dropout1d(p=0.2),
+        )
+
+        self.cnn2 = nn.Sequential(
+            nn.Conv1d(cnn_filter_size, hidden_size, kernel_size=9, stride=3),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_features=hidden_size),
+            nn.Dropout1d(p=0.2),
+        )
+
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        
+        self.seq_1 = nn.Sequential(
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.BatchNorm1d(num_features=hidden_size),
+            nn.Dropout1d(p=0.2),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size//2),
+            nn.BatchNorm1d(num_features=hidden_size//2),
+            nn.Dropout1d(p=0.2),
+            nn.ReLU(),
+        )
+        
+        self.classifier = nn.Linear(in_features=hidden_size//2, out_features=output_size)
+        
+    def forward(self, x):
+        output = self.cnn1(x)
+        output = self.cnn2(output)
+        b, _, _ = output.shape
+        
+        output = self.gap(output).view(b, -1)
+
+        output = self.seq_1(output)
+        output = self.classifier(output)
+        
+        return output

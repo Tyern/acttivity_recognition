@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.join(os.path.abspath(''), ".."))
 
 from utils.FFT import stft
 
-DATA_ROOT = "../data/compgan_dataset/"
+curr = os.path.dirname(__file__)
+DATA_ROOT = os.path.join(curr, "../data/compgan_dataset/")
 
 train_data_file_name_ = "train_data{}.npy"
 train_label_file_name_ = "train_label{}.npy"
