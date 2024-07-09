@@ -27,7 +27,7 @@ import sys
 
 from model_builder import FixedLSTMModel3, FixedLSTMModel3Attention1, \
     FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath, \
-    FixedLSTMModel5, FixedLSTMModel5Attention1
+    FixedLSTMModel5, FixedLSTMModel5Attention1, FixedLSTMModel3_GAttention2
 
 sys.path.insert(0, os.path.join(os.path.abspath(''), "../.."))
 from model.builder import LSTMModel, LSTMAttentionModel
@@ -59,6 +59,8 @@ if pc == 0:
 elif pc == 1:
     # train_model_class = [FixedLSTMModel3, FixedLSTMModel3Attention1]
     train_model_class = [FixedLSTMModel5]
+elif pc == 2:
+    train_model_class = [FixedLSTMModel3_GAttention2]
 elif pc == 3:
     # train_model_class = [FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
     train_model_class = [FixedLSTMModel5Attention1]

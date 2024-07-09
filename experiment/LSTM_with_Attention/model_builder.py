@@ -306,6 +306,67 @@ class FixedLSTMModel3_GAttention1(BaseModel): # test whether add ReLU after rnn 
         return output
     
 
+class FixedLSTMModel3_GAttention2(BaseModel): # test whether add ReLU after rnn is better?
+    def __init__(self, hidden_size=64, sequence_length=256, input_size=42, output_size=10, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.example_input_array = torch.rand(10, input_size, sequence_length)
+        self.activation = nn.ReLU()
+        self.dropout = nn.Dropout2d(p=0.2)
+        
+        # input should be unsqueeze
+        self.cnn_extract1 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(1,6), stride=(1,6))
+        # output should be squeeze channel, to (b, 256, 42//6)
+        self.rnn1 = nn.LSTM(input_size=input_size, 
+                          hidden_size=7,
+                          num_layers=1,
+                          batch_first=True)
+        
+        self.rnn2 = nn.LSTM(input_size=7, 
+                    hidden_size=hidden_size,
+                    num_layers=2,
+                    batch_first=True)
+        
+        self.seq_1 = nn.Sequential(
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_features=hidden_size),
+            nn.Dropout1d(p=0.2),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_features=hidden_size),
+            nn.Dropout1d(p=0.2),
+        )
+        self.classifier = nn.Linear(in_features=hidden_size, out_features=output_size)
+        
+    def forward(self, x):
+        x = x.permute(0, 2, 1)
+        # cnn path
+        cnn_extract = x.view(x.shape[0], 1, x.shape[1], x.shape[2])
+        cnn_extract = self.cnn_extract1(cnn_extract)
+        cnn_extract = cnn_extract.view(cnn_extract.shape[0], cnn_extract.shape[2], cnn_extract.shape[3])
+        
+        # rnn path
+        output, _ = self.rnn1(x)
+        
+        # attention and residual
+        attn = nn.functional.scaled_dot_product_attention(output, cnn_extract, cnn_extract)
+        output = attn + output
+        
+        output, _ = self.rnn2(output)
+        
+        output = self.activation(output)
+        output = self.dropout(output)
+        
+        b, _, _ = output.size()
+        output = output[:,-1,:].view(b,-1)
+        
+        output = self.seq_1(output)
+        output = self.classifier(output)
+        
+        return output
+    
+
 class FixedLSTMModel3_GAttention1_Mulpath(BaseModel):
     def __init__(self, hidden_size=64, sequence_length=256, input_size=42, output_size=10, **kwargs):
         super().__init__()
