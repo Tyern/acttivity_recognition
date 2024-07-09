@@ -44,7 +44,7 @@ patience = 15
 missing = 6
 user = 0
 
-batch_size = 512
+batch_size = 128
 
 log_save_dir = os.path.join(".", "results")
 os.makedirs(log_save_dir, exist_ok=True)
@@ -56,9 +56,10 @@ if pc == 0:
     train_model_class = [LSTMModel, LSTMAttentionModel]
 elif pc == 1:
     # train_model_class = [FixedLSTMModel3, FixedLSTMModel3Attention1]
-    train_model_class = [FixedLSTMModel5, FixedLSTMModel5Attention1]
+    train_model_class = [FixedLSTMModel5]
 elif pc == 3:
-    train_model_class = [FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
+    # train_model_class = [FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
+    train_model_class = [FixedLSTMModel5Attention1]
         
 for model_class in train_model_class: 
     
