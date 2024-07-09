@@ -219,13 +219,13 @@ class FixedLSTMModel5Attention1(BaseModel): # test whether add ReLU after rnn is
         output = self.activation(output)
         output = self.dropout(output)
         
-        output, _ = self.rnn2(x)
+        output, _ = self.rnn2(output)
         output, _ = self.attention2(output, output, output)
         
         output = self.activation(output)
         output = self.dropout(output)
         
-        output, _ = self.rnn3(x)
+        output, _ = self.rnn3(output)
         output, _ = self.attention3(output, output, output)
         
         output = self.activation(output)
@@ -384,7 +384,7 @@ class FixedLSTMModel3_GAttention1_Mulpath(BaseModel):
     
 if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
-    model_class_list = [FixedLSTMModel3, FixedLSTMModel3Attention1, FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
+    model_class_list = [FixedLSTMModel3, FixedLSTMModel3Attention1, FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath, FixedLSTMModel5, FixedLSTMModel5Attention1]
     for model_class in model_class_list:
         model_name = model_class.__name__
         print("#"*20, model_name, "#"*20)
