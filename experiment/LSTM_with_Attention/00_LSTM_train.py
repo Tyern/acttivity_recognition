@@ -44,7 +44,7 @@ patience = 15
 missing = 6
 user = 0
 
-batch_size = 1024
+batch_size = 512
 
 log_save_dir = os.path.join(".", "results")
 os.makedirs(log_save_dir, exist_ok=True)
