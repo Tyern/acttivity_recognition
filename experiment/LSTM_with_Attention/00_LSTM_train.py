@@ -25,7 +25,9 @@ import gc
 import time
 import sys
 
-from model_builder import FixedLSTMModel3, FixedLSTMModel3Attention1, FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath
+from model_builder import FixedLSTMModel3, FixedLSTMModel3Attention1, \
+    FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath, \
+    FixedLSTMModel5, FixedLSTMModel5Attention1
 
 sys.path.insert(0, os.path.join(os.path.abspath(''), "../.."))
 from model.builder import LSTMModel, LSTMAttentionModel
