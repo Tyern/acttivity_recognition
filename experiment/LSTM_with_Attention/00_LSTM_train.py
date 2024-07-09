@@ -55,7 +55,8 @@ pc = get_PC()
 if pc == 0:
     train_model_class = [LSTMModel, LSTMAttentionModel]
 elif pc == 1:
-    train_model_class = [FixedLSTMModel3, FixedLSTMModel3Attention1]
+    # train_model_class = [FixedLSTMModel3, FixedLSTMModel3Attention1]
+    train_model_class = [FixedLSTMModel5, FixedLSTMModel5Attention1]
 elif pc == 3:
     train_model_class = [FixedLSTMModel3_GAttention1, FixedLSTMModel3_GAttention1_Mulpath]
         
