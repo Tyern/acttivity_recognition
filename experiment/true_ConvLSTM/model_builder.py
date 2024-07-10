@@ -87,21 +87,3 @@ class CompDiscNet(BaseModel): # test whether add ReLU after rnn is better?
             nn.Sigmoid(),
         )
         
-    
-
-def comp_discNet(n_steps,n_length,n_features): 256, 42, 1
-    model=Sequential()
-
-    #識別部
-    #model.add(Reshape((1,256,42,1)))
-    model.add(Conv2D(filters=32,kernel_size=(3,3),activation='relu',strides=1,padding='same'))
-    model.add(BatchNormalization())
-    model.add(Conv2D(filters=64,kernel_size=(3,3),activation='relu',strides=1,padding='same'))
-    model.add(BatchNormalization())
-    model.add(MaxPooling2D(pool_size=(2,2)))
-    model.add(Reshape((1,128,21,64)))
-    model.add(ConvLSTM2D(filters=64, kernel_size=(1,3), activation='relu'))
-    model.add(Flatten())
-    model.add(Dense(64, activation='relu'))
-    model.add(Dense(10, activation='softmax'))
-    return model
