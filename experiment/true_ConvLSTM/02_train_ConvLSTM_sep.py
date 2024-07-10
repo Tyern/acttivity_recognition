@@ -52,24 +52,24 @@ os.makedirs(log_save_dir, exist_ok=True)
 train_model_class = [ConvLSTMModel]
 pc = get_PC()
 
-user_list = []
+missing_list = []
 if pc == 0:
-    user_list = []
+    missing_list = []
 elif pc == 1:
-    user_list = [0]
+    missing_list = [4]
 elif pc == 2:
-    user_list = [1]
+    missing_list = [5]
 elif pc == 3:
-    user_list = [2]
+    missing_list = []
 
 for model_class in train_model_class: 
     
     model_name = model_class.__name__
     print("Running for model", model_name)
     
-    for missing_sensor_numbers in [4,5]: ## Changed for 1 missing sensor
+    for missing_sensor_numbers in missing_list: ## Changed for 1 missing sensor
         n_epochs = max_epochs // (missing_sensor_numbers + 1)
-        for user in user_list: ## Changed for user 2 only
+        for user in [0,1,2]: ## Changed for user 2 only
             log_save_name = f"{model_name}/{missing_sensor_numbers}_missing/user{user}"
             
             data_module = DataModule(
